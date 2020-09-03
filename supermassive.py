@@ -1,3 +1,7 @@
+"""
+Original author: Dmitry Sokolov (dsokolov)
+Modifications: Eugene Zuev (zhekazuev@gmail.com)
+"""
 import paramiko
 import config
 import time
@@ -57,8 +61,7 @@ print('20. Other commands\n')
 
 command_number = int(input('Choose the command number: '))
 
-print(
-'''Please choose a platform for receiving commands
+print('''Please choose a platform for receiving commands
 1. ASR5000
 2. ASR5700
 3. VPC-SI
