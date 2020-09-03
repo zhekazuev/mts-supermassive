@@ -2,94 +2,156 @@
 Original author: Dmitry Sokolov (dsokolov)
 Modifications: Eugene Zuev (zhekazuev@gmail.com)
 """
+from threading import Thread
 import paramiko
 import config
 import time
 
 
-all_names = config.all_names
-all_ips = config.all_ips
+class SSH:
+    def __init__(self, host, user, password, port=22):
+        self.client = None
+        self.conn = None
+        self.host = host
+        self.user = user
+        self.password = password
+        self.port = port
 
-asr5000_names = config.asr5000_names
-asr5000_ips = config.asr5000_ips
+    def connect(self):
+        """Open ssh connection."""
+        if self.conn is None:
+            try:
+                self.client = paramiko.SSHClient()
+                self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                self.client.connect(hostname=self.host, port=self.port, username=self.user, password=self.password)
+                return self.client
+            except paramiko.AuthenticationException as authException:
+                print(f"{authException}, please verify your credentials")
+            except paramiko.SSHException as sshException:
+                print(f"Could not establish SSH connection: {sshException}")
 
-asr5700_names = config.asr5700_names
-asr5700_ips = config.asr5700_ips
+    def shell(self, cmd, pause=5, buffer=1000):
+        """"""
+        with self.connect().invoke_shell() as shell:
+            shell.send(cmd)
+            time.sleep(pause)
+            output = shell.recv(buffer).decode('utf8')
+            return output
 
-vpcsi_names = config.vpcsi_names
-vpcsi_ips = config.vpcsi_ips
+    def execute_commands(self, cmd):
+        """
+        Execute command in succession.
 
-ultram_names = config.ultram_names
-ultram_ips = config.apn_gw_ips
+        :param cmd: One command for example: show administrators
+        :type cmd: str
+        """
+        stdin, stdout, stderr = self.client.exec_command(cmd)
+        stdout.channel.recv_exit_status()
+        response = stdout.readlines()
+        return response
 
-apn_gw_names = config.apn_gw_names
-apn_gw_ips = config.apn_gw_ips
+    def put(self, localpath, remotepath):
+        sftp = self.client.open_sftp()
+        sftp.put(localpath, remotepath)
+        time.sleep(10)
+        sftp.close()
+        self.client.close()
 
-command_list = config.command_list
+    def get(self, remotepath, localpath):
+        sftp = self.client.open_sftp()
+        sftp.get(remotepath, localpath)
+        time.sleep(10)
+        sftp.close()
+        self.client.close()
+
+    def disconnect(self):
+        """Close ssh connection."""
+        if self.client:
+            self.client.close()
 
 
-user = config.user
-password = config.password
-
-
-def command_send(ip, name, command, personal_id, personal_command):
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(hostname=ip, port=22, username=user, password=password)
-    print('Info from ' + name + ':\n')
-    chan = ssh.invoke_shell()
+def command_send(device, command, personal_id, personal_command):
+    user = config.user
+    password = config.password
+    ssh = SSH(host=device.get('host'), user=user, password=password)
     if personal_id == 1:
         for line in personal_command:
-            chan.send(line + '\n')
-            time.sleep(2)
+            output = ssh.shell(f"{line}\n", pause=2)
+            print("*" * 80)
+            print(f"Info from {device.get('hostname')}:")
+            print('\n'.join(output.split('\n')[3:-1]))
     else:
-        chan.send(command + '\n')
-        time.sleep(2)
-    output = chan.recv(100000).decode("utf-8")
-    print('\n'.join(output.split('\n')[3:]) + '\n' + '*' * 80)
-    ssh.close()
+        output = ssh.shell(f"{command}\n", pause=2)
+        print("*"*80)
+        print(f"Info from {device.get('hostname')}:")
+        print('\n'.join(output.split('\n')[3:-1]))
+    ssh.disconnect()
 
 
-def procedure(device_ips, device_names, command, personal_id, personal_command):
-    for ip, name in zip(device_ips, device_names):
-        command_send(ip, name, command, personal_id, personal_command)
+class Sender(Thread):
+    pass
 
 
-for i, command in zip(range(0,15), command_list):
-    print(i, command)
-print('20. Other commands\n')
+def procedure(devices, command, personal_id, personal_command):
+    threads = []
+    for device in devices:
+        thread = Thread(target=command_send, args=(device, command, personal_id, personal_command))
+        thread.setDaemon(True)
+        thread.start()
+        threads.append(thread)
 
-command_number = int(input('Choose the command number: '))
+    for thread in threads:
+        thread.join()
 
-print('''Please choose a platform for receiving commands
-1. ASR5000
-2. ASR5700
-3. VPC-SI
-4. Ultra-M
-5. APN-GW
-6. Any platform''')
 
-personal_command = ''
-platform_number = int(input('Choose the variant number: '))
+def main():
+    all_hosts = config.all_hosts
+    asr5000 = config.asr5000
+    asr5700 = config.asr5700
+    vpcsi = config.vpcsi
+    ultram = config.ultram
+    apngw = config.apngw
+    command_list = config.command_list
 
-if command_number == 20:
-    personal_command = input('Enter command. Please for separating new lines use "+": ').split('+')
-    personal_id = 1
-    command_number = 0
-else:
-    personal_id = 0
+    for i, command in zip(range(1, len(command_list)+1), command_list):
+        print(i, command, sep=". ")
+    print(f'{len(command_list)+1}. Other commands\n')
 
-if platform_number == 1:
-    procedure(asr5000_ips, asr5000_names, command_list[command_number], personal_id, personal_command)
-elif platform_number == 2:
-    procedure(asr5700_ips, asr5700_names, command_list[command_number], personal_id, personal_command)
-elif platform_number == 3:
-    procedure(vpcsi_ips, vpcsi_names, command_list[command_number], personal_id, personal_command)
-elif platform_number == 4:
-    procedure(ultram_ips, ultram_names, command_list[command_number], personal_id, personal_command)
-elif platform_number == 5:
-    procedure(apn_gw_ips, apn_gw_names, command_list[command_number], personal_id, personal_command)
-elif platform_number == 6:
-    procedure(all_ips, all_names, command_list[command_number], personal_id, personal_command)
-else:
-    print('Procedure was failed. Please check you input data and retry again.')
+    command_number = int(input('Choose the command number: '))
+
+    print('''Please choose a platform for receiving commands
+    1. ASR5000
+    2. ASR5700
+    3. VPC-SI
+    4. Ultra-M
+    5. APN-GW
+    6. Any platform''')
+
+    personal_command = ''
+    platform_number = int(input('Choose the variant number: '))
+
+    if command_number == len(command_list) + 1:
+        personal_command = input('Enter command. Please for separating new lines use "+": ').split('+')
+        personal_id = 1
+        command_number = 0
+    else:
+        personal_id = 0
+
+    if platform_number == 1:
+        procedure(asr5000, command_list[command_number], personal_id, personal_command)
+    elif platform_number == 2:
+        procedure(asr5700, command_list[command_number], personal_id, personal_command)
+    elif platform_number == 3:
+        procedure(vpcsi, command_list[command_number], personal_id, personal_command)
+    elif platform_number == 4:
+        procedure(ultram, command_list[command_number], personal_id, personal_command)
+    elif platform_number == 5:
+        procedure(apngw, command_list[command_number], personal_id, personal_command)
+    elif platform_number == 6:
+        procedure(all_hosts, command_list[command_number], personal_id, personal_command)
+    else:
+        print('Procedure was failed. Please check you input data and retry again.')
+
+
+if __name__ == '__main__':
+    main()
