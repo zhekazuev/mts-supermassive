@@ -77,14 +77,18 @@ def command_send(device, command, personal_id, personal_command):
     if personal_id == 1:
         for line in personal_command:
             output = ssh.shell(f"{line}\n", pause=2)
-            print("*" * 80)
-            print(f"Info from {device.get('hostname')}:")
-            print('\n'.join(output.split('\n')[3:-1]))
+            delimiter = ("*" * 80)
+            info = f"Info from {device.get('hostname')}"
+            message = '\n'.join(output.split('\n')[3:])
+            text = f"{delimiter}\n{info}\n{message}"
+            print(text)
     else:
         output = ssh.shell(f"{command}\n", pause=2)
-        print("*"*80)
-        print(f"Info from {device.get('hostname')}:")
-        print('\n'.join(output.split('\n')[3:-1]))
+        delimiter = ("*" * 80)
+        info = f"Info from {device.get('hostname')}"
+        message = '\n'.join(output.split('\n')[3:])
+        text = f"{delimiter}\n{info}\n{message}"
+        print(text)
     ssh.disconnect()
 
 
