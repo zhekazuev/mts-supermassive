@@ -140,6 +140,7 @@ def main():
         command_number = 0
     else:
         personal_id = 0
+        command_number -= 1
 
     if platform_number == 1:
         procedure(asr5000, command_list[command_number], personal_id, personal_command)
@@ -153,6 +154,8 @@ def main():
         procedure(apngw, command_list[command_number], personal_id, personal_command)
     elif platform_number == 6:
         procedure(all_hosts, command_list[command_number], personal_id, personal_command)
+    elif platform_number == 0:
+        print('Procedure was failed. Please check you input data and retry again.')
     else:
         print('Procedure was failed. Please check you input data and retry again.')
 
