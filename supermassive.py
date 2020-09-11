@@ -2,7 +2,9 @@
 Original author: Dmitry Sokolov (dsokolov)
 Modifications: Eugene Zuev (zhekazuev@gmail.com)
 """
+from colorama import Fore, Back, Style
 from threading import Thread
+from queue import Queue
 import paramiko
 import config
 import time
@@ -84,7 +86,7 @@ def command_send(device, command, personal_id, personal_command):
             print(text)
     else:
         output = ssh.shell(f"{command}\n", pause=2)
-        delimiter = ("*" * 80)
+        delimiter = Fore.RED + ("*" * 80)
         info = f"Info from {device.get('hostname')}"
         message = '\n'.join(output.split('\n')[3:])
         text = f"{delimiter}\n{info}\n{message}"
@@ -93,16 +95,31 @@ def command_send(device, command, personal_id, personal_command):
 
 
 class Sender(Thread):
-    pass
+    def __init__(self, device, command, personal_id, personal_command):
+        Thread.__init__(self)
+        self.device = device
+        self.command = command
+        self.personal_id = personal_id
+        self.personal_command = personal_command
+
+    def run(self):
+        print("initializing " + self.name)
+        command_send(self.device, self.command, self.personal_id, self.personal_command)
+        print("Exiting " + self.name)
 
 
 def procedure(devices, command, personal_id, personal_command):
+    q = Queue()
     threads = []
     for device in devices:
         thread = Thread(target=command_send, args=(device, command, personal_id, personal_command))
         thread.setDaemon(True)
         thread.start()
         threads.append(thread)
+
+    for i in range(devices):
+        q.put(i)
+    q.put([devices, command, personal_id, personal_command])
 
     for thread in threads:
         thread.join()
@@ -117,9 +134,9 @@ def main():
     apngw = config.apngw
     command_list = config.command_list
 
-    for i, command in zip(range(1, len(command_list)+1), command_list):
+    for i, command in zip(range(1, len(command_list) + 1), command_list):
         print(i, command, sep=". ")
-    print(f'{len(command_list)+1}. Other commands\n')
+    print(f'{len(command_list) + 1}. Other commands\n')
 
     command_number = int(input('Choose the command number: '))
 
