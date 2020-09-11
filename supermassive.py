@@ -109,17 +109,12 @@ class Sender(Thread):
 
 
 def procedure(devices, command, personal_id, personal_command):
-    q = Queue()
     threads = []
     for device in devices:
         thread = Thread(target=command_send, args=(device, command, personal_id, personal_command))
         thread.setDaemon(True)
         thread.start()
         threads.append(thread)
-
-    for i in range(devices):
-        q.put(i)
-    q.put([devices, command, personal_id, personal_command])
 
     for thread in threads:
         thread.join()
