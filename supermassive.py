@@ -78,14 +78,14 @@ def command_send(device, command, personal_id, personal_command):
     ssh = SSH(host=device.get('host'), user=user, password=password)
     if personal_id == 1:
         for line in personal_command:
-            output = ssh.shell(f"{line}\n", pause=2)
+            output = ssh.shell(f"{line}\n", pause=2, buffer=20000)
             delimiter = ("*" * 80)
             info = f"Info from {device.get('hostname')}"
             message = '\n'.join(output.split('\n')[3:])
             text = f"{delimiter}\n{info}\n{message}"
             print(text)
     else:
-        output = ssh.shell(f"{command}\n", pause=2)
+        output = ssh.shell(f"{command}\n", pause=2, buffer=20000)
         delimiter = Fore.RED + ("*" * 80)
         info = f"Info from {device.get('hostname')}"
         message = '\n'.join(output.split('\n')[3:])
