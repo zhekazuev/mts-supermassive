@@ -195,14 +195,14 @@ class RemoteClient:
         return responses
 
     @logger.catch
-    def shell(self, commands, pause=1, buffer=10000):
+    def shell(self, commands, pause=1.0, buffer=10000):
         """
         Execute multiple commands in succession.
 
         :param commands: List of unix commands as strings.
         :type commands: List[str]
         :param pause: Time to wait for one command
-        :type pause: int
+        :type pause: float
         :param buffer: Max recv buffer
         :type buffer: int
         """
