@@ -191,7 +191,7 @@ class RemoteClient:
             for line in response:
                 output += line
             responses += response
-            logger.info(f'\nINPUT: {cmd}\nOUTPUT:\n {output}')
+            logger.info(f'\nINPUT: {self.host}: {cmd}\nOUTPUT:\n {output}')
         return responses
 
     @logger.catch
@@ -217,5 +217,5 @@ class RemoteClient:
             for line in response:
                 output += line
             responses += response
-        logger.info(f'\nINPUT: {commands}\nOUTPUT:\n {responses}')
+        logger.info(f'\nINPUT: {self.host}: {commands}\nOUTPUT:\n {responses}')
         return responses
