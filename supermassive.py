@@ -2,117 +2,31 @@
 Original author: Dmitry Sokolov (dsokolov)
 Modifications: Eugene Zuev (zhekazuev@gmail.com)
 """
-from colorama import Fore, Back, Style
+from client import RemoteClient
 from threading import Thread
-from queue import Queue
 import paramiko
 import config
 import time
+import re
 
 
-class SSH:
-    def __init__(self, host, user, password, port=22):
-        self.client = None
-        self.conn = None
-        self.host = host
-        self.user = user
-        self.password = password
-        self.port = port
+def command_send(device, commands, pause):
+    user = config.StarOS.user
+    password = config.StarOS.password
+    host = device.get('host')
+    commands = [command + "\n" for command in commands]
 
-    def connect(self):
-        """Open ssh connection."""
-        if self.conn is None:
-            try:
-                self.client = paramiko.SSHClient()
-                self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                self.client.connect(hostname=self.host, port=self.port, username=self.user, password=self.password)
-                return self.client
-            except paramiko.AuthenticationException as authException:
-                print(f"{authException}, please verify your credentials")
-            except paramiko.SSHException as sshException:
-                print(f"Could not establish SSH connection: {sshException}")
-
-    def shell(self, cmd, pause=5, buffer=1000):
-        """"""
-        with self.connect().invoke_shell() as shell:
-            shell.send(cmd)
-            time.sleep(pause)
-            output = shell.recv(buffer).decode('utf8')
-            return output
-
-    def execute_commands(self, cmd):
-        """
-        Execute command in succession.
-
-        :param cmd: One command for example: show administrators
-        :type cmd: str
-        """
-        stdin, stdout, stderr = self.client.exec_command(cmd)
-        stdout.channel.recv_exit_status()
-        response = stdout.readlines()
-        return response
-
-    def put(self, localpath, remotepath):
-        sftp = self.client.open_sftp()
-        sftp.put(localpath, remotepath)
-        time.sleep(10)
-        sftp.close()
-        self.client.close()
-
-    def get(self, remotepath, localpath):
-        sftp = self.client.open_sftp()
-        sftp.get(remotepath, localpath)
-        time.sleep(10)
-        sftp.close()
-        self.client.close()
-
-    def disconnect(self):
-        """Close ssh connection."""
-        if self.client:
-            self.client.close()
+    try:
+        with RemoteClient(host, user, password) as ssh:
+            ssh.shell(commands, pause=pause, buffer=20000)
+    except paramiko.SSHException as sshException:
+        print(f'Error: {sshException}')
 
 
-def command_send(device, command, personal_id, personal_command):
-    user = config.user
-    password = config.password
-    ssh = SSH(host=device.get('host'), user=user, password=password)
-    if personal_id == 1:
-        for line in personal_command:
-            output = ssh.shell(f"{line}\n", pause=2, buffer=20000)
-            delimiter = ("*" * 80)
-            info = f"Info from {device.get('hostname')}"
-            message = '\n'.join(output.split('\n')[3:])
-            text = f"{delimiter}\n{info}\n{message}"
-            print(text)
-    else:
-        output = ssh.shell(f"{command}\n", pause=2, buffer=20000)
-        delimiter = Fore.RED + ("*" * 80)
-        info = f"Info from {device.get('hostname')}"
-        message = '\n'.join(output.split('\n')[3:])
-        text = f"{delimiter}\n{info}\n{message}"
-        print(text)
-    ssh.disconnect()
-
-
-class Sender(Thread):
-    def __init__(self, device, command, personal_id, personal_command):
-        Thread.__init__(self)
-        self.device = device
-        self.command = command
-        self.personal_id = personal_id
-        self.personal_command = personal_command
-
-    def run(self):
-        print("initializing " + self.name)
-        command_send(self.device, self.command, self.personal_id, self.personal_command)
-        print("Exiting " + self.name)
-
-
-def procedure(devices, command, personal_id, personal_command):
+def procedure(devices, commands, pause=1.0):
     threads = []
     for device in devices:
-        thread = Thread(target=command_send, args=(device, command, personal_id, personal_command))
-        thread.setDaemon(True)
+        thread = Thread(target=command_send, args=(device, commands, pause))
         thread.start()
         threads.append(thread)
 
@@ -121,17 +35,17 @@ def procedure(devices, command, personal_id, personal_command):
 
 
 def main():
-    all_hosts = config.all_hosts
-    asr5000 = config.asr5000
-    asr5700 = config.asr5700
-    vpcsi = config.vpcsi
-    ultram = config.ultram
-    apngw = config.apngw
-    command_list = config.command_list
+    all_hosts = config.StarOS.all_hosts
+    asr5000 = config.StarOS.asr5000
+    asr5700 = config.StarOS.asr5700
+    vpcsi = config.StarOS.vpcsi
+    ultram = config.StarOS.ultram
+    apngw = config.StarOS.apngw
+    command_list = config.StarOS.command_list
 
     for i, command in zip(range(1, len(command_list) + 1), command_list):
         print(i, command, sep=". ")
-    print(f'{len(command_list) + 1}. Other commands\n')
+    print(f'{len(command_list) + 1}. User commands\n')
 
     command_number = int(input('Choose the command number: '))
 
@@ -143,33 +57,35 @@ def main():
     5. APN-GW
     6. Any platform''')
 
-    personal_command = ''
     platform_number = int(input('Choose the variant number: '))
 
+    pause = float(input("Enter the waiting time(default 1 second): "))
+
     if command_number == len(command_list) + 1:
-        personal_command = input('Enter command. Please for separating new lines use "+": ').split('+')
-        personal_id = 1
-        command_number = 0
+        commands = input('Enter command. Please for separating new lines use "+": ').split('+')
     else:
-        personal_id = 0
-        command_number -= 1
+        commands = [command_list[command_number]]
+
+    start_time = time.time()
 
     if platform_number == 1:
-        procedure(asr5000, command_list[command_number], personal_id, personal_command)
+        procedure(asr5000, commands, pause)
     elif platform_number == 2:
-        procedure(asr5700, command_list[command_number], personal_id, personal_command)
+        procedure(asr5700, commands, pause)
     elif platform_number == 3:
-        procedure(vpcsi, command_list[command_number], personal_id, personal_command)
+        procedure(vpcsi, commands, pause)
     elif platform_number == 4:
-        procedure(ultram, command_list[command_number], personal_id, personal_command)
+        procedure(ultram, commands, pause)
     elif platform_number == 5:
-        procedure(apngw, command_list[command_number], personal_id, personal_command)
+        procedure(apngw, commands, pause)
     elif platform_number == 6:
-        procedure(all_hosts, command_list[command_number], personal_id, personal_command)
+        procedure(all_hosts, commands, pause)
     elif platform_number == 0:
         print('Procedure was failed. Please check you input data and retry again.')
     else:
         print('Procedure was failed. Please check you input data and retry again.')
+
+    print("--- %s seconds ---" % (time.time() - start_time))
 
 
 if __name__ == '__main__':
